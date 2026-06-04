@@ -1,0 +1,15 @@
+[project]
+name = "ruc-auto-course"
+version = "1.0.0"
+description = "人大暑期学校自动选课脚本 — RUC ISS auto course selector"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.28.0",
+]
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
