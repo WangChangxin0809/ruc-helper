@@ -33,8 +33,39 @@ def decrypt_password(encrypted: str) -> str:
     return _cipher.decrypt(encrypted.encode()).decode()
 
 
+USER_INFO_URL = "https://jw.ruc.edu.cn/resService/jwxtpt/v1/jczy/userIndex/findUserDetailNew?resourceCode=XSMH0526&apiCode=jwPublic.controller.UserIndexController.findUserDetailNew"
+
+
+def fetch_student_info(token: str, session: str, authcode: str) -> dict:
+    """获取学生详细信息（姓名、院系、专业、年级）"""
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "app": "PCWEB",
+            "locale": "zh_CN",
+            "token": token,
+            "userrolecode": "student",
+            "Cookie": f"SESSION={session}; authcode={authcode}",
+        }
+        resp = requests.post(USER_INFO_URL, json={}, headers=headers, timeout=10)
+        data = resp.json()
+        if data.get("errorCode") == "success":
+            xs = data["data"].get("xsInfo", {})
+            user = data["data"].get("holder", {}).get("userInfo", {})
+            return {
+                "name": user.get("username") or xs.get("xs_name") or authcode,
+                "major": xs.get("ndzy_name") or "",
+                "grade": xs.get("dqszj") or xs.get("rxnf") or "",
+                "department": xs.get("skdw_name") or "",
+            }
+    except Exception as e:
+        print(f"[auth] 获取学生信息失败: {e}")
+    return {"name": authcode, "major": "", "grade": "", "department": ""}
+
+
 def do_login(student_id: str, password: str) -> dict | None:
-    """登录获取 token，返回 dict 或 None"""
+    """登录获取 token + 学生信息，返回 dict 或 None"""
     payload = {
         "userCode": student_id,
         "password": password,
@@ -57,9 +88,16 @@ def do_login(student_id: str, password: str) -> dict | None:
     session = resp.cookies.get("SESSION", "")
     authcode = data["data"].get("authcode", student_id)
 
+    # 获取学生详细信息
+    info = fetch_student_info(token, session, authcode)
+
     return {
         "resToken": token,
         "session": session,
         "authcode": authcode,
+        "name": info["name"],
+        "major": info["major"],
+        "grade": info["grade"],
+        "department": info["department"],
         "token_expires_at": (datetime.now(TZ) + timedelta(hours=3)).replace(tzinfo=None),
     }

@@ -46,9 +46,11 @@ def add_student(body: StudentCreate, db: Session = Depends(get_db)):
 
     student = Student(
         student_id=body.student_id,
-        name=result["authcode"],
+        name=result.get("name", result["authcode"]),
         password=encrypt_password(body.password),
         email=body.email,
+        major=result.get("major", ""),
+        grade=result.get("grade", ""),
         res_token=result["resToken"],
         session=result["session"],
         authcode=result["authcode"],
@@ -99,8 +101,9 @@ def relogin_student(student_id: str, db: Session = Depends(get_db)):
     s.session = result["session"]
     s.authcode = result["authcode"]
     s.token_expires_at = result["token_expires_at"]
-    if not s.name or s.name == student_id:
-        s.name = result["authcode"]
+    s.name = result.get("name", result["authcode"])
+    s.major = result.get("major", s.major or "")
+    s.grade = result.get("grade", s.grade or "")
     s.updated_at = now()
     db.commit()
 
