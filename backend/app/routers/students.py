@@ -123,9 +123,10 @@ def toggle_monitor(student_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{student_id}/test-email", response_model=MessageResponse)
 def test_email(student_id: str, db: Session = Depends(get_db)):
-    """完整测试：随机删一门成绩 → 拉取API → 检测新增 → 发送邮件"""
+    """完整测试：随机删一门成绩 → 调用监控轮询（登录+拉取+比对+发邮件）"""
     import random
-    from ..services.grade import fetch_grades_from_api, sync_grades, send_grade_email, EMAIL_CONFIG
+    from ..services.grade import EMAIL_CONFIG
+    from ..services.monitor import poll_student_sync
     from ..models import Grade
 
     s = db.query(Student).filter(Student.student_id == student_id).first()
@@ -146,33 +147,18 @@ def test_email(student_id: str, db: Session = Depends(get_db)):
     deleted_name = target.course_name
     db.delete(target)
     db.commit()
-    print(f"[test-email] 已删除: {deleted_name}")
 
-    # 3. 拉取最新成绩并同步（会检测到被删的课为新增）
-    raw = fetch_grades_from_api(s.res_token, s.session, s.authcode)
-    if raw is None:
-        raise HTTPException(502, "测试失败：无法连接教务系统")
+    # 3. 调用监控的轮询逻辑（登录→拉取→比对→发邮件）
+    result = poll_student_sync(db, s)
 
-    result = sync_grades(db, s, raw)
-    new_count = result["new_count"]
-    new_grades = result["new_grades"]
+    if not result["ok"]:
+        raise HTTPException(500, f"测试失败：{result['error']}")
 
-    if new_count == 0:
-        raise HTTPException(500, f"测试失败：删除 {deleted_name} 后未检测到新增，请检查 API 数据")
-
-    # 4. 发送真实通知邮件
-    ok = send_grade_email(s.email, s.name or student_id, new_grades, [])
-    if not ok:
-        raise HTTPException(500, "测试失败：邮件发送失败")
-
-    # 5. 记录日志
-    from ..models import NotificationLog
-    grade_ids = [g.cjgl016id for g in new_grades]
-    db.add(NotificationLog(student_id=student_id, grade_ids=json.dumps(grade_ids), change_type="test"))
-    db.commit()
+    if result["new"] == 0:
+        raise HTTPException(500, f"测试失败：删除「{deleted_name}」后未检测到新增")
 
     return MessageResponse(
-        message=f"测试通过！已删除「{deleted_name}」→ 检测到新增 {new_count} 门 → 邮件已发送至 {s.email}"
+        message=f"测试通过！已删除「{deleted_name}」→ 检测到新增 {result['new']} 门 → 邮件已发送至 {s.email}"
     )
 
 

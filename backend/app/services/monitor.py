@@ -32,16 +32,17 @@ def is_running() -> bool:
     return _monitor_task is not None and not _monitor_task.done()
 
 
-async def _poll_student(db: Session, student: Student):
-    """对单个学生执行一次轮询"""
+def poll_student_sync(db: Session, student: Student) -> dict:
+    """对单个学生执行一次轮询（同步版本，供监控和测试共用）
+    返回 {"ok": bool, "new": int, "updated": int, "error": str}
+    """
     student_id = student.student_id
 
-    # 每次都重新登录获取新 token（适用于长间隔轮询）
+    # 每次都重新登录获取新 token
     password = decrypt_password(student.password)
     result = do_login(student_id, password)
     if not result:
-        print(f"[monitor] 登录失败，跳过本轮 {student_id}")
-        return
+        return {"ok": False, "new": 0, "updated": 0, "error": "登录失败"}
     student.res_token = result["resToken"]
     student.session = result["session"]
     student.authcode = result["authcode"]
@@ -54,35 +55,38 @@ async def _poll_student(db: Session, student: Student):
     # 拉取成绩
     raw = fetch_grades_from_api(student.res_token, student.session, student.authcode)
     if raw is None:
-        print(f"[monitor] 拉取成绩失败 {student_id}")
-        return
+        return {"ok": False, "new": 0, "updated": 0, "error": "拉取成绩失败"}
 
     # 同步 + 比对
-    result = sync_grades(db, student, raw)
-    new_count = result["new_count"]
-    updated_count = result["updated_count"]
+    sync_result = sync_grades(db, student, raw)
+    new_count = sync_result["new_count"]
+    updated_count = sync_result["updated_count"]
 
     if new_count == 0 and updated_count == 0:
-        return
+        return {"ok": True, "new": 0, "updated": 0, "error": ""}
 
     print(f"[monitor] {student_id} 变化: 新增{new_count} 更新{updated_count}")
 
     # 记录通知日志
-    grade_ids = [g.cjgl016id for g in result["new_grades"] + result["updated_grades"]]
+    grade_ids = [g.cjgl016id for g in sync_result["new_grades"] + sync_result["updated_grades"]]
     if new_count:
-        log = NotificationLog(student_id=student_id, grade_ids=json.dumps(grade_ids), change_type="new")
-        db.add(log)
+        db.add(NotificationLog(student_id=student_id, grade_ids=json.dumps(grade_ids), change_type="new"))
     if updated_count:
-        log = NotificationLog(student_id=student_id, grade_ids=json.dumps(grade_ids), change_type="updated")
-        db.add(log)
+        db.add(NotificationLog(student_id=student_id, grade_ids=json.dumps(grade_ids), change_type="updated"))
     db.commit()
 
-    # 发送邮件到学生个人邮箱
-    if not student.email:
-        print(f"[monitor] {student_id} 未设置通知邮箱，跳过")
-        return
-    student_name = student.name or student_id
-    send_grade_email(student.email, student_name, result["new_grades"], result["updated_grades"])
+    # 发送邮件
+    if student.email:
+        send_grade_email(student.email, student.name or student_id,
+                         sync_result["new_grades"], sync_result["updated_grades"])
+
+    return {"ok": True, "new": new_count, "updated": updated_count,
+            "new_grades": sync_result["new_grades"], "updated_grades": sync_result["updated_grades"]}
+
+
+async def _poll_student(db: Session, student: Student):
+    """异步包装，供后台轮询循环调用"""
+    poll_student_sync(db, student)
 
 
 async def _poll_loop():
