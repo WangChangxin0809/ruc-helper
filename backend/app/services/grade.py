@@ -150,7 +150,7 @@ def sync_grades(db: Session, student: Student, raw_grades: list[dict]) -> dict:
 
     db.commit()
     return {
-        "total": len(raw_grades),
+        "total": len(current_ids),
         "new_count": len(new_grades),
         "updated_count": len(updated_grades),
         "new_grades": new_grades,
