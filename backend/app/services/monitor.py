@@ -18,7 +18,6 @@ _monitor_task: asyncio.Task | None = None
 _heartbeat_task: asyncio.Task | None = None
 _poll_interval: int = 30
 _heartbeat_interval: int = 5 * 3600  # 5 小时
-_heartbeat_email: str = ""
 
 
 def get_poll_interval() -> int:
@@ -128,15 +127,27 @@ async def _poll_loop():
         await asyncio.sleep(_poll_interval)
 
 
+def _get_heartbeat_email():
+    """从 DB 读取心跳邮箱"""
+    try:
+        db = SessionLocal()
+        s = db.query(Setting).filter(Setting.key == "heartbeatEmail").first()
+        db.close()
+        return s.value if s and s.value else ""
+    except Exception:
+        return ""
+
+
 async def _heartbeat_loop():
     """心跳检测：每 5 小时发送监控总结邮件"""
-    global _heartbeat_interval, _heartbeat_email
-    await asyncio.sleep(60)  # 启动后等 1 分钟再发第一次
+    global _heartbeat_interval
+    await asyncio.sleep(60)
     while True:
         try:
+            heartbeat_email = _get_heartbeat_email()
             db = SessionLocal()
             students = db.query(Student).filter(Student.is_monitored == True).all()
-            if students and _heartbeat_email:
+            if students and heartbeat_email:
                 now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
                 rows_text = ""
                 total_polls = 0
@@ -161,15 +172,15 @@ async def _heartbeat_loop():
                 from email.mime.text import MIMEText
                 msg = MIMEText(body, "plain", "utf-8")
                 msg["From"] = EMAIL_CONFIG["fromAddress"]
-                msg["To"] = _heartbeat_email
+                msg["To"] = heartbeat_email
                 msg["Subject"] = f"[RUC Helper] 监控心跳 — {now_str}"
                 import smtplib
                 server = smtplib.SMTP(EMAIL_CONFIG["smtpHost"], EMAIL_CONFIG["smtpPort"], timeout=15)
                 server.starttls()
                 server.login(EMAIL_CONFIG["smtpUsername"], EMAIL_CONFIG["smtpPassword"])
-                server.sendmail(EMAIL_CONFIG["fromAddress"], [_heartbeat_email], msg.as_string())
+                server.sendmail(EMAIL_CONFIG["fromAddress"], [heartbeat_email], msg.as_string())
                 server.quit()
-                print(f"[heartbeat] 已发送至 {_heartbeat_email}")
+                print(f"[heartbeat] 已发送至 {heartbeat_email}")
             db.close()
         except Exception as e:
             print(f"[heartbeat] 异常: {e}")
@@ -177,12 +188,21 @@ async def _heartbeat_loop():
 
 
 def set_heartbeat_email(email: str):
-    global _heartbeat_email
-    _heartbeat_email = email
+    try:
+        db = SessionLocal()
+        s = db.query(Setting).filter(Setting.key == "heartbeatEmail").first()
+        if s:
+            s.value = email
+        else:
+            db.add(Setting(key="heartbeatEmail", value=email))
+        db.commit()
+        db.close()
+    except Exception:
+        pass
 
 
 def get_heartbeat_email() -> str:
-    return _heartbeat_email
+    return _get_heartbeat_email()
 
 
 def start_monitor(poll_interval: int = 30):
