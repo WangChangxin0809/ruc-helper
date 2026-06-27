@@ -58,8 +58,25 @@ async def _poll_student(db: Session, student: Student):
     # 拉取成绩
     raw = fetch_grades_from_api(student.res_token, student.session, student.authcode)
     if raw is None:
-        print(f"[monitor] 拉取成绩失败 {student_id}")
-        return
+        # token 可能提前过期，尝试重新登录后重试一次
+        print(f"[monitor] 拉取失败，尝试重登 {student_id}")
+        password = decrypt_password(student.password)
+        result = do_login(student_id, password)
+        if not result:
+            print(f"[monitor] 重登失败，跳过本轮 {student_id}")
+            return
+        student.res_token = result["resToken"]
+        student.session = result["session"]
+        student.authcode = result["authcode"]
+        student.token_expires_at = result["token_expires_at"]
+        student.name = result.get("name", result["authcode"])
+        student.major = result.get("major", student.major or "")
+        student.grade = result.get("grade", student.grade or "")
+        db.commit()
+        raw = fetch_grades_from_api(student.res_token, student.session, student.authcode)
+        if raw is None:
+            print(f"[monitor] 重试仍失败 {student_id}")
+            return
 
     # 同步 + 比对
     result = sync_grades(db, student, raw)

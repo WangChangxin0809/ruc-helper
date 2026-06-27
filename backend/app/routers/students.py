@@ -128,10 +128,25 @@ def test_email(student_id: str, db: Session = Depends(get_db)):
     if not s.email:
         raise HTTPException(400, "该学生未设置通知邮箱")
 
-    from ..services.grade import send_grade_email
+    from ..services.grade import send_grade_email, EMAIL_CONFIG
     from ..models import Grade
-    grades = db.query(Grade).filter(Grade.student_id == student_id).all()
-    ok = send_grade_email(s.email, s.name or student_id, grades[:1], [])
+
+    # 检查 SMTP 是否已配置
+    if not EMAIL_CONFIG.get("smtpUsername"):
+        raise HTTPException(400, "SMTP 未配置，请先在设置中配置发件邮箱")
+
+    # 构造一条明确的测试消息
+    from ..models import Grade as GradeModel
+    count = db.query(GradeModel).filter(GradeModel.student_id == student_id).count()
+    fake_test = [type('FakeGrade', (), {
+        'course_name': '【测试邮件】',
+        'score': '-',
+        'credit': 0,
+        'grade_point': 0,
+        'teacher': '系统',
+        'semester': f'当前已同步 {count} 门成绩',
+    })()]
+    ok = send_grade_email(s.email, s.name or student_id, fake_test, [])
     if ok:
         return MessageResponse(message=f"测试邮件已发送至 {s.email}")
     raise HTTPException(500, "邮件发送失败，请检查 SMTP 配置")
