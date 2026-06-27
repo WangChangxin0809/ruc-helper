@@ -4,6 +4,7 @@
 import json
 import requests
 import smtplib
+import time
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from sqlalchemy.orm import Session
@@ -68,22 +69,34 @@ def fetch_grades_from_api(res_token: str, session: str, authcode: str) -> list[d
     url = f"{BASE_URL}{GRADE_API_PATH}?resourceCode={RESOURCE_CODE}&apiCode={API_CODE}"
     headers = build_headers(res_token, session, authcode)
 
-    try:
-        resp = requests.post(url, json={}, headers=headers, timeout=15)
-    except Exception as e:
-        print(f"[grade] 网络异常: {e}")
-        return None
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json={}, headers=headers, timeout=30)
+        except Exception as e:
+            print(f"[grade] 网络异常 (尝试{attempt+1}/3): {e}")
+            if attempt < 2:
+                time.sleep(3)
+                continue
+            return None
 
-    if resp.status_code != 200:
-        print(f"[grade] HTTP {resp.status_code}: {resp.text[:200]}")
-        return None
+        if resp.status_code != 200:
+            print(f"[grade] HTTP {resp.status_code}: {resp.text[:200]}")
+            if attempt < 2:
+                time.sleep(3)
+                continue
+            return None
 
-    data = resp.json()
-    if data.get("errorCode") != "success":
-        print(f"[grade] API 错误: {data.get('errorMessage', data.get('errorCode'))}")
-        return None
+        data = resp.json()
+        if data.get("errorCode") != "success":
+            print(f"[grade] API 错误: {data.get('errorMessage', data.get('errorCode'))}")
+            if attempt < 2:
+                time.sleep(3)
+                continue
+            return None
 
-    return data.get("data", [])
+        return data.get("data", [])
+
+    return None
 
 
 def sync_grades(db: Session, student: Student, raw_grades: list[dict]) -> dict:
