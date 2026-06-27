@@ -6,6 +6,7 @@ const emit = defineEmits<{ close: []; added: [] }>()
 
 const studentId = ref('')
 const password = ref('')
+const email = ref('')
 const error = ref('')
 const submitting = ref(false)
 
