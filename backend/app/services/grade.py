@@ -177,7 +177,7 @@ def sync_grades(db: Session, student: Student, raw_grades: list[dict]) -> dict:
 
 
 def send_grade_email(to_address: str, student_name: str, new_grades: list, updated_grades: list):
-    """发送成绩变动通知邮件"""
+    """发送成绩变动通知邮件（HTML 格式）"""
     if not EMAIL_CONFIG.get("smtpUsername"):
         print("[email] 未配置 SMTP，跳过邮件发送")
         return False
@@ -187,26 +187,41 @@ def send_grade_email(to_address: str, student_name: str, new_grades: list, updat
         return False
 
     now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-    lines = [f"{student_name} 的成绩变动通知 — {now_str}", ""]
 
+    def _row(g, highlight=False):
+        score = getattr(g, 'score', '-')
+        return f"""<tr{' style=background:#f0faf5' if highlight else ''}>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee'>{g.course_name}</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#1a5276'>{score}</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee;text-align:center'>{g.credit}</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee;text-align:center'>{g.grade_point}</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee'>{g.teacher}</td>
+            <td style='padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;color:#888'>{g.semester}</td>
+        </tr>"""
+
+    parts = []
     if new_grades:
-        lines.append(f"新增 {len(new_grades)} 门课程成绩:")
-        lines.append("")
-        for g in new_grades:
-            lines.append(f"  {g.course_name}  {g.score}分  学分{g.credit}  绩点{g.grade_point}  教师:{g.teacher}  {g.semester}")
-        lines.append("")
-
+        rows = "".join(_row(g, True) for g in new_grades)
+        parts.append(f"""<h3 style='color:#27ae60'>新增 {len(new_grades)} 门</h3>
+        <table style='width:100%;border-collapse:collapse;font-size:13px;font-family:sans-serif'>
+        <tr style='background:#f8f8fb'><th style='padding:8px;text-align:left'>课程</th><th>成绩</th><th>学分</th><th>绩点</th><th>教师</th><th>学期</th></tr>
+        {rows}</table>""")
     if updated_grades:
-        lines.append(f"更新 {len(updated_grades)} 门课程成绩:")
-        lines.append("")
-        for g in updated_grades:
-            lines.append(f"  {g.course_name}  {g.score}分  学分{g.credit}  绩点{g.grade_point}")
-        lines.append("")
+        rows = "".join(_row(g) for g in updated_grades)
+        parts.append(f"""<h3 style='color:#e67e22'>更新 {len(updated_grades)} 门</h3>
+        <table style='width:100%;border-collapse:collapse;font-size:13px;font-family:sans-serif'>
+        <tr style='background:#f8f8fb'><th style='padding:8px;text-align:left'>课程</th><th>成绩</th><th>学分</th><th>绩点</th><th>教师</th><th>学期</th></tr>
+        {rows}</table>""")
 
-    body = "\n".join(lines)
+    body = f"""<div style='max-width:600px;margin:0 auto;font-family:sans-serif'>
+        <h2>RUC Helper — 成绩变动通知</h2>
+        <p>{student_name}，{now_str}</p>
+        {"".join(parts)}
+        <p style='margin-top:20px;font-size:12px;color:#999'>此邮件由 RUC Helper 自动发送</p>
+    </div>"""
 
     try:
-        msg = MIMEText(body, "plain", "utf-8")
+        msg = MIMEText(body, "html", "utf-8")
         msg["From"] = EMAIL_CONFIG["fromAddress"]
         msg["To"] = to_address
         parts = []

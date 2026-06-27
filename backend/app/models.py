@@ -76,6 +76,16 @@ class NotificationLog(Base):
         return json.loads(self.grade_ids) if self.grade_ids else []
 
 
+class MonitorLog(Base):
+    __tablename__ = "monitor_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(String(20), nullable=False, index=True)
+    status = Column(String(20), default="ok")   # ok / fail / noop
+    message = Column(Text, default="")
+    created_at = Column(DateTime, default=now)
+
+
 class Setting(Base):
     __tablename__ = "settings"
 

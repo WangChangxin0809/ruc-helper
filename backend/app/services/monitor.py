@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models import Student, NotificationLog, now
+from ..models import Student, NotificationLog, MonitorLog, now
 from .auth import do_login, decrypt_password
 from .grade import fetch_grades_from_api, sync_grades, send_grade_email
 
@@ -37,10 +37,22 @@ def poll_student_sync(db: Session, student: Student) -> dict:
     """
     student_id = student.student_id
 
+    def _log(status: str, msg: str):
+        db.add(MonitorLog(student_id=student_id, status=status, message=msg))
+        db.commit()
+        # 只保留最近 200 条
+        old = db.query(MonitorLog).order_by(MonitorLog.id.desc()).offset(200).all()
+        for o in old:
+            db.delete(o)
+        db.commit()
+
+    _log("ok", "开始轮询")
+
     # 每次都重新登录获取新 token
     password = decrypt_password(student.password)
     result = do_login(student_id, password)
     if not result:
+        _log("fail", "登录失败")
         return {"ok": False, "new": 0, "updated": 0, "error": "登录失败"}
     student.res_token = result["resToken"]
     student.session = result["session"]
@@ -54,6 +66,7 @@ def poll_student_sync(db: Session, student: Student) -> dict:
     # 拉取成绩
     raw = fetch_grades_from_api(student.res_token, student.session, student.authcode)
     if raw is None:
+        _log("fail", "拉取成绩失败")
         return {"ok": False, "new": 0, "updated": 0, "error": "拉取成绩失败"}
 
     # 同步 + 比对
@@ -62,9 +75,11 @@ def poll_student_sync(db: Session, student: Student) -> dict:
     updated_count = sync_result["updated_count"]
 
     if new_count == 0 and updated_count == 0:
+        _log("noop", f"无变化 ({sync_result['total']}门)")
         return {"ok": True, "new": 0, "updated": 0, "error": ""}
 
     print(f"[monitor] {student_id} 变化: 新增{new_count} 更新{updated_count}")
+    _log("ok", f"新增{new_count}门 更新{updated_count}门 (共{sync_result['total']}门)")
 
     # 先发送邮件，成功后再记录日志
     email_sent = False

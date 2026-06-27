@@ -5,6 +5,7 @@ import type { Student, MonitorStatus } from '../types'
 import StudentCard from '../components/StudentCard.vue'
 import AddStudentDialog from '../components/AddStudentDialog.vue'
 import SmtpSettings from '../components/SmtpSettings.vue'
+import MonitorLog from '../components/MonitorLog.vue'
 
 const students = ref<Student[]>([])
 const status = ref<MonitorStatus>({ running: false, poll_interval: 30, active_students: 0 })
@@ -114,6 +115,7 @@ onMounted(load)
 
     <!-- Main Content -->
     <main class="main-content">
+      <MonitorLog />
       <div v-if="loading" class="state-box">
         <div class="spinner"></div>
         <p>加载中...</p>

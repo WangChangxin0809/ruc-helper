@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Student, NotificationLog
+from ..models import Student, NotificationLog, MonitorLog
 from ..schemas import MonitorStatus, MonitorHistoryItem, MessageResponse
 from ..services.monitor import start_monitor, stop_monitor, is_running, get_poll_interval, set_poll_interval
 
@@ -63,3 +63,11 @@ def get_history(db: Session = Depends(get_db)):
         )
         for log in logs
     ]
+
+
+@router.get("/logs")
+def get_logs(db: Session = Depends(get_db)):
+    logs = db.query(MonitorLog).order_by(MonitorLog.id.desc()).limit(50).all()
+    return [{"id": l.id, "student_id": l.student_id, "status": l.status,
+             "message": l.message, "created_at": l.created_at.isoformat() if l.created_at else None}
+            for l in logs]
