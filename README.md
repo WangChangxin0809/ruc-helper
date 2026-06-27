@@ -1,161 +1,120 @@
-# RUC Auto Choose Course
+# RUC 教务工具集
 
-人大教务系统自动选课脚本 — 用于[人大国际小学期](https://jw.ruc.edu.cn)（RUC International Summer School）的课程自动抢课。
+中国人民大学教务系统自动化工具 — 包含 **成绩监控 Web 应用** 和 **CLI 选课/查成绩脚本**。
 
-每 2 秒轮询可选课程列表，发现有余量的目标课程后自动执行 7 步检查链 + 选课，支持热重载配置（改黑名单/目标课程无需重启）。
+## 项目结构
 
-## 功能
+```
+├── cli/                        # CLI 工具
+│   ├── get_token.py            #   通过学号密码获取 Token
+│   ├── auto_grade.py           #   自动轮询成绩变动
+│   └── auto_course.py          #   自动抢课（需额外凭据）
+├── backend/                    # FastAPI 后端
+│   ├── Dockerfile
+│   └── app/
+│       ├── main.py             #   入口 + 生命周期
+│       ├── database.py         #   SQLAlchemy + SQLite
+│       ├── models.py           #   ORM 模型
+│       ├── schemas.py          #   Pydantic 请求/响应
+│       ├── routers/            #   students / grades / monitor
+│       └── services/           #   auth / grade / monitor
+├── frontend/                   # Vue 3 + Vite 前端
+│   └── src/
+│       ├── views/              #   Dashboard / StudentDetail
+│       ├── components/         #   StudentCard / GradeTable / AddStudentDialog
+│       ├── api/                #   Axios 封装
+│       └── types/              #   TypeScript 类型
+├── nginx/                      # Nginx 配置 + Dockerfile
+├── docker-compose.yml          # 一键部署
+├── config.example.json         # 配置模板
+├── pyproject.toml              # uv / Python 项目
+└── CONTEXT.md                  # API 分析笔记
+```
 
-- **自动抢课** — 30 秒轮询，发现空位立即抢
-- **热重载配置** — 修改 `config.json` 的黑名单、目标课程，脚本自动感知
-- **短路检查链** — 7 步前置检查，任一步失败即跳过，减少无效请求
-- **多候选遍历** — 同时有多个候选课程时，按优先级逐个尝试直到成功
-- **时间冲突自动黑名单** — 和已选课时间冲突的课程自动加入黑名单
-- **Inner/Outer 双路径** — 校内 IP 走 `selectCourseByInner`，失败自动 fallback `selectCourse`
-- **日志双写** — 屏幕 + `auto_course.log` 文件同步输出
+## Web 应用（Docker 部署）
 
-## 快速开始
+### 功能
 
-### 1. 环境
+- **多学生管理** — 添加多个学生，独立监控
+- **成绩自动轮询** — 后台定时查询，发现新课/成绩变动即时通知
+- **邮件通知** — 成绩变动自动发送邮件（支持 QQ 邮箱等 SMTP）
+- **GPA 计算** — 自动计算平均学分绩点，P/F 课程排除在外
+- **可视化面板** — Vue 3 前端，成绩表格含平时/期中/期末/最终成绩
+
+### 快速启动
 
 ```bash
-pip install uv          # 如果没有 uv
-uv sync                 # 自动创建 venv + 安装依赖
+docker compose up -d
 ```
 
-Python 3.8+ + `uv` + `requests`。也可以用传统 `pip install -r requirements.txt`。
+访问 http://localhost:8080
 
-### 2. 获取凭据
+### 配置
 
-登录教务系统后，需要从浏览器中提取 **3 个值**：`EL-ADMIN-TOEKN`（JWT Token）、`access_token` 和 `SESSION`。
+编辑 `docker-compose.yml` 中的 SMTP 环境变量：
 
-#### 方法 A: Application 面板（推荐）
-
-1. 浏览器打开 [https://jw.ruc.edu.cn](https://jw.ruc.edu.cn)，用学号+密码+验证码登录
-2. 按 `F12` 打开开发者工具
-3. 点击顶部 **Application** 标签（中文版叫 **应用**）
-   - 如果标签栏没显示，点最右边的 `>>` 就能找到
-4. 左侧面板展开：**Storage**（存储）→ **Cookies** → **https://jw.ruc.edu.cn**
-5. 你会看到很多行，找到以下 3 个，双击 Value 列复制：
-
-   | Cookie 名 | 说明 |
-   |-----------|------|
-   | `EL-ADMIN-TOEKN` | JWT Token（最长的那个，~200字符） |
-   | `access_token` | 访问令牌（约 22 字符） |
-   | `SESSION` | 会话 ID（UUID 格式） |
-
-   > 不需要：`authcode`（学号明文）、`token`（空值）
-
-#### 方法 B: Network 面板（更简单）
-
-1. 登录后，在页面上随便点击一个菜单（比如「已选课程」）
-2. `F12` → **Network**（网络）标签
-3. 左侧会出现很多请求，随便点一个
-4. 右侧找到 **Request Headers**（请求标头），找到 `Cookie:` 那一行
-5. 整行复制，把值填入 `config.json` 的 `cookie` 字段
-6. 再从 Cookie 行里提取 `EL-ADMIN-TOEKN` 的值，单独填入 `token` 字段
-
-#### 组装 Cookie
-
-把 3 个值拼成一行，格式如下：
-
-```
-access_token=你复制的值; SESSION=你复制的值; EL-ADMIN-TOEKN=你复制的值
+```yaml
+environment:
+  SMTP_HOST: smtp.qq.com
+  SMTP_PORT: 587
+  SMTP_USERNAME: 你的邮箱@qq.com
+  SMTP_PASSWORD: QQ邮箱授权码
+  SMTP_FROM: 你的邮箱@qq.com
 ```
 
-> ⚠️ JWT 有效期约 4 小时，过期需重新登录获取。
-
-### 3. 配置
+## CLI 工具
 
 ```bash
-cp config.example.json config.json
+# 获取成绩查询 Token
+uv run cli/get_token.py
+
+# 自动查成绩（轮询模式）
+uv run cli/auto_grade.py
+
+# 自动抢课（需先手动获取 EL-ADMIN-TOEKN）
+uv run cli/auto_course.py
 ```
 
-编辑 `config.json`，填入真实凭据：
+CLI 工具依赖根目录的 `config.json`（从 `config.example.json` 复制并填写凭据）。
 
-```json
-{
-  "baseUrl": "https://jw.ruc.edu.cn",
-  "auth": {
-    "token": "你的_EL-ADMIN-TOEKN_值",
-    "cookie": "access_token=xxx; SESSION=xxx; EL-ADMIN-TOEKN=xxx"
-  }
-}
-```
+## 凭据获取
 
-### 4. 运行
+### 成绩查询（自动）
 
-```bash
-uv run auto_course.py
-# 或
-python auto_course.py
-```
+运行 `get_token.py`，输入学号+密码即可自动获取 Token 并写入 `config.json`。
 
-## 配置说明
+### 选课（手动）
 
-`config.json` 中可热修改的字段（无需重启）：
+选课 API 需要 `EL-ADMIN-TOEKN`（与成绩 API 是不同的认证体系），需从浏览器手动提取：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `blacklist` | `string[]` | 永不选的课程班号，如 `["FD2643", "CM2601"]` |
-| `targets` | `string[]` | 优先抢的课程（按顺序），空 = 按名额排序抢 |
+1. 浏览器登录 [jw.ruc.edu.cn](https://jw.ruc.edu.cn)
+2. F12 → Application → Cookies → jw.ruc.edu.cn
+3. 复制 `EL-ADMIN-TOEKN`、`access_token`、`SESSION`
+4. 填入 `config.json` 的 `auth` 字段
 
-改完保存，最多 2 秒后脚本自动生效。
+## API 架构
 
-## 工作原理
+系统有两套独立的认证和 API 网关：
 
-### 选课检查链（7 + 1 步）
+| | 选课 API | 成绩 API |
+|------|----------|----------|
+| 路径 | `/minJwxt/mgmt/...` | `/resService/jwxtpt/v1/...` |
+| 鉴权头 | `Authorization: Bearer <EL-ADMIN-TOEKN>` | `token: <JWT>` |
+| Cookie | `access_token`, `SESSION`, `EL-ADMIN-TOEKN` | `SESSION`, `authcode` |
+| 获取方式 | 浏览器 F12 手动复制 | `get_token.py` 自动获取 |
 
-```
-checkContactInfo          → 检查联系方式
-cheCourseTimeContr        → 检查选课时间 + 数量上限
-checkCourseSelected       → 检查是否已选过
-checkCourseSurplusCapacity → 检查剩余名额
-checkCourseSettleTime     → 检查时间冲突（失败自动加黑名单）
-checkStuLabel             → 检查学生标签
-getStuCourseNum           → 获取已选门数
-────────────────────────────────────
-selectCourseByInner       → 校内选课 (Inner路径)
-  └─ 403 fallback → selectCourse → 外网选课
-```
+## 技术栈
 
-### Content-Type 规范
-
-| 接口类型 | Content-Type | Body |
-|----------|-------------|------|
-| 查询类 | `application/json` | `{"page": {...}}` |
-| 操作类（选课/退课/检查） | **`text/plain`** | 纯 `crs_id` 字符串 |
-
-> ⚠️ 关键坑点：操作类接口必须用 `text/plain` 传纯字符串，用 `application/json` 会返回 400。
-
-### 选课时间窗口
-
-学期数据中包含三轮校内选课时间（`internalCourseStartTime` / `internalCourseEndTime`，后缀 `2`、`3` 表示轮次），脚本通过 `checkSelectCourseTime` 和 `checkCourseSettleTime` 验证。
-
-## 文件结构
-
-```
-├── auto_course.py          # 主脚本
-├── pyproject.toml          # uv 项目配置
-├── requirements.txt        # pip 兼容
-├── config.example.json     # 配置模板（可提交）
-├── config.json             # 真实凭据（gitignore 保护）
-├── .gitignore
-├── CONTEXT.md              # 开发笔记 / API 分析记录
-└── auto_course.log         # 运行日志（gitignore 保护）
-```
-
-## 系统信息
-
-- **系统**: 人大国际小学期 (RUC ISS)
-- **开发商**: 湖南强智科技
-- **前端**: Vue.js SPA (Element UI)
-- **网关**: `jw.ruc.edu.cn` → `gateway-service:8001`
-- **认证**: 学号+密码+验证码登录 → `EL-ADMIN-TOEKN` (JWT) + Cookie
+| 层 | 技术 |
+|------|------|
+| 前端 | Vue 3, TypeScript, Vite, Axios |
+| 后端 | FastAPI, SQLAlchemy, SQLite, uvicorn |
+| 部署 | Docker Compose, Nginx |
+| CLI | Python 3.12+, requests |
 
 ## 免责声明
 
-本工具仅供学习研究使用。请遵守学校相关规定，合理使用选课系统资源。
+本工具仅供学习研究使用。请遵守学校相关规定，合理使用教务系统资源。
 
 ## License
 

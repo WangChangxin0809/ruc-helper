@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    container_name: ruc-backend
+    volumes:
+      - db_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/grades.db
+      - POLL_INTERVAL=30
+      - SMTP_HOST=smtp.qq.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=2211399628@qq.com
+      - SMTP_PASSWORD=wbnzegvuvnpbeaad
+      - SMTP_FROM=2211399628@qq.com
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: ruc-nginx
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  db_data:
+

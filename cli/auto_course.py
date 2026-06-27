@@ -32,8 +32,10 @@ from datetime import datetime, timezone, timedelta
 sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
 
 # ========== 日志双写 (屏幕 + 文件) ==========
-LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto_course.log")
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SCRIPT_DIR)
+LOG_FILE = os.path.join(ROOT_DIR, "auto_course.log")
+CONFIG_FILE = os.path.join(ROOT_DIR, "config.json")
 
 
 class Tee:

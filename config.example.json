@@ -2,9 +2,13 @@
   "_comment": "复制此文件为 config.json 并填入真实凭据。Copy this to config.json with real credentials.",
   "baseUrl": "https://jw.ruc.edu.cn",
   "auth": {
-    "_如何获取": "浏览器登录 jw.ruc.edu.cn → F12 → Application → Cookies → 复制 EL-ADMIN-TOEKN 和完整 Cookie",
-    "token": "你的_JWT_TOKEN (EL-ADMIN-TOEKN 的值)",
-    "cookie": "access_token=xxx; SESSION=xxx; EL-ADMIN-TOEKN=xxx"
+    "_如何获取_course": "选课API: 浏览器登录 jw.ruc.edu.cn → F12 → Application → Cookies → 复制 EL-ADMIN-TOEKN 和完整 Cookie",
+    "token": "你的_EL-ADMIN-TOEKN（用于选课API，Bearer鉴权）",
+    "cookie": "access_token=xxx; SESSION=xxx; EL-ADMIN-TOEKN=xxx",
+    "_如何获取_grade": "成绩API: 运行 get_token.py 自动获取，或手动填入以下三项",
+    "resToken": "成绩API的JWT（运行 get_token.py 自动填入）",
+    "session": "成绩API的SESSION（运行 get_token.py 自动填入）",
+    "authcode": "学号（运行 get_token.py 自动填入）"
   },
   "student": {
     "name": "姓名",
@@ -46,6 +50,20 @@
     "queryZeroOrOneCourse": "/minJwxt/mgmt/student/course/queryZeroOrOneCourse",
     "RecordUnpaidCourses": "/minJwxt/mgmt/student/course/RecordUnpaidCourses",
     "getStuLabelCourseNum": "/minJwxt/mgmt/student/course/getStuLabelCourseNum"
+  },
+  "grade": {
+    "apiPath": "/resService/jwxtpt/v1/xsd/cjgl_xsxdsq/findKccjList",
+    "resourceCode": "XSMH0526",
+    "apiCode": "jw.xsd.xsdInfo.controller.CjglKccjckController.findKccjList",
+    "pollInterval": 30
+  },
+  "email": {
+    "smtpHost": "smtp.qq.com",
+    "smtpPort": 587,
+    "smtpUsername": "你的QQ邮箱@qq.com",
+    "smtpPassword": "QQ邮箱授权码",
+    "fromAddress": "你的QQ邮箱@qq.com",
+    "toAddress": "接收通知的邮箱"
   },
   "blacklist": [],
   "targets": []
