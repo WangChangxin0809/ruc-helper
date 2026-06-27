@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models import Student, NotificationLog, MonitorLog, now
+from ..models import Student, NotificationLog, MonitorLog, Setting, now
 from .auth import do_login, decrypt_password
 from .grade import fetch_grades_from_api, sync_grades, send_grade_email, EMAIL_CONFIG
 
@@ -188,17 +188,14 @@ async def _heartbeat_loop():
 
 
 def set_heartbeat_email(email: str):
-    try:
-        db = SessionLocal()
-        s = db.query(Setting).filter(Setting.key == "heartbeatEmail").first()
-        if s:
-            s.value = email
-        else:
-            db.add(Setting(key="heartbeatEmail", value=email))
-        db.commit()
-        db.close()
-    except Exception:
-        pass
+    db = SessionLocal()
+    s = db.query(Setting).filter(Setting.key == "heartbeatEmail").first()
+    if s:
+        s.value = email
+    else:
+        db.add(Setting(key="heartbeatEmail", value=email))
+    db.commit()
+    db.close()
 
 
 def get_heartbeat_email() -> str:
