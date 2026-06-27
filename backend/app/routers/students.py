@@ -149,16 +149,29 @@ def test_email(student_id: str, db: Session = Depends(get_db)):
     db.delete(target)
     db.commit()
 
+    def _restore():
+        """恢复被删成绩（幂等：已存在则跳过）"""
+        try:
+            exists = db.query(Grade).filter(
+                Grade.student_id == student_id,
+                Grade.cjgl016id == saved_data["cjgl016id"]
+            ).first()
+            if not exists:
+                restore = Grade(**{k: v for k, v in saved_data.items() if k != 'id'})
+                db.add(restore)
+                db.commit()
+                return True
+        except Exception as e:
+            db.rollback()
+            print(f"[test-email] 恢复失败: {e}")
+        return False
+
     try:
-        # 3. 调用监控的轮询逻辑
         result = poll_student_sync(db, s)
         if not result["ok"] or result["new"] == 0:
-            # 失败：手动恢复被删的成绩
-            restore = Grade(**{k: v for k, v in saved_data.items() if k != 'id'})
-            db.add(restore)
-            db.commit()
+            _restore()
             err = result["error"] or "未检测到新增"
-            raise HTTPException(500, f"测试失败：{err}（已恢复「{deleted_name}」）")
+            raise HTTPException(500, f"测试失败：{err}（{'已恢复' if _restore() else '恢复失败，请手动检查'}「{deleted_name}」）")
 
         return MessageResponse(
             message=f"测试通过！临时删除「{deleted_name}」→ 检测到新增 {result['new']} 门 → 邮件已发送至 {s.email}"
@@ -166,10 +179,8 @@ def test_email(student_id: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        restore = Grade(**{k: v for k, v in saved_data.items() if k != 'id'})
-        db.add(restore)
-        db.commit()
-        raise HTTPException(500, f"测试失败：{e}（已恢复「{deleted_name}」）")
+        restored = _restore()
+        raise HTTPException(500, f"测试失败：{e}（{'已恢复' if restored else '恢复失败，请手动检查'}「{deleted_name}」）")
 
 
 @router.put("/{student_id}/email", response_model=StudentResponse)

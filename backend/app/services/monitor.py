@@ -86,8 +86,9 @@ def poll_student_sync(db: Session, student: Student) -> dict:
 
 
 async def _poll_student(db: Session, student: Student):
-    """异步包装，供后台轮询循环调用"""
-    poll_student_sync(db, student)
+    """异步包装：在独立线程执行同步 I/O，不阻塞事件循环"""
+    import asyncio
+    await asyncio.to_thread(poll_student_sync, db, student)
 
 
 async def _poll_loop():

@@ -13,24 +13,23 @@ const grades = ref<GradeItem[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const result = ref<GradeRefreshResult | null>(null)
-
-const semesters = computed(() => {
-  const set = new Set(grades.value.map(g => g.semester))
-  return Array.from(set).sort().reverse()
-})
+let _reqGen = 0
 
 async function load() {
+  const gen = ++_reqGen
   loading.value = true
   student.value = null
   grades.value = []
   try {
     const [s, g] = await Promise.all([getStudent(props.id), getGrades(props.id)])
+    if (gen !== _reqGen) return
     student.value = s
     grades.value = g
   } catch (e) {
+    if (gen !== _reqGen) return
     console.error(e)
   }
-  loading.value = false
+  if (gen === _reqGen) loading.value = false
 }
 
 let _retryLeft = 1
@@ -41,13 +40,18 @@ async function refresh() {
 }
 
 async function _doRefresh() {
+  const gen = ++_reqGen
   refreshing.value = true
   result.value = null
   try {
-    result.value = await refreshGrades(props.id)
+    const r = await refreshGrades(props.id)
+    if (gen !== _reqGen) return
+    result.value = r
     const g = await getGrades(props.id)
+    if (gen !== _reqGen) return
     grades.value = g
   } catch (e: any) {
+    if (gen !== _reqGen) return
     if (e.response?.status === 502 && _retryLeft > 0) {
       _retryLeft--
       try { await reloginStudent(props.id) } catch (_) { /* ignore */ }
