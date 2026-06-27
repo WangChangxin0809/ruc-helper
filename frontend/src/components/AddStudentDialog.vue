@@ -20,7 +20,7 @@ async function submit() {
     await addStudent({
       student_id: studentId.value,
       password: password.value,
-      email: '',
+      email: email.value,
     })
     emit('added')
   } catch (e: any) {
@@ -57,6 +57,16 @@ async function submit() {
           v-model="password"
           type="password"
           placeholder="输入密码"
+          @keyup.enter="submit"
+        />
+      </div>
+
+      <div class="field">
+        <label>通知邮箱（选填）</label>
+        <input
+          v-model="email"
+          type="email"
+          placeholder="成绩变动通知，如 123@qq.com"
           @keyup.enter="submit"
         />
       </div>

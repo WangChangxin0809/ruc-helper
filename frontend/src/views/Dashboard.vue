@@ -1,19 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { listStudents, deleteStudent, getMonitorStatus, startMonitor, stopMonitor, toggleMonitorStudent } from '../api'
+import { listStudents, deleteStudent, getMonitorStatus, startMonitor, stopMonitor, toggleMonitorStudent, testEmailStudent, setMonitorConfig } from '../api'
 import type { Student, MonitorStatus } from '../types'
 import StudentCard from '../components/StudentCard.vue'
 import AddStudentDialog from '../components/AddStudentDialog.vue'
+import SmtpSettings from '../components/SmtpSettings.vue'
 
 const students = ref<Student[]>([])
 const status = ref<MonitorStatus>({ running: false, poll_interval: 30, active_students: 0 })
 const showAdd = ref(false)
+const showSettings = ref(false)
 const loading = ref(true)
-const globalEmail = ref(localStorage.getItem('globalEmail') || '')
-
-function saveEmail() {
-  localStorage.setItem('globalEmail', globalEmail.value)
-}
+const pollInterval = ref(30)
 
 async function load() {
   loading.value = true
@@ -31,10 +29,20 @@ async function toggleMonitor() {
   if (status.value.running) {
     await stopMonitor()
   } else {
-    await startMonitor(status.value.poll_interval)
+    await setMonitorConfig('', pollInterval.value)
+    await startMonitor(pollInterval.value)
   }
   const st = await getMonitorStatus()
   status.value = st
+}
+
+async function handleTestEmail(studentId: string) {
+  try {
+    const r = await testEmailStudent(studentId) as any
+    alert(r.message || '测试邮件已发送')
+  } catch (e: any) {
+    alert(e.response?.data?.detail || '发送失败')
+  }
 }
 
 async function handleToggleStudent(studentId: string) {
@@ -70,14 +78,10 @@ onMounted(load)
         </div>
 
         <div class="topbar-controls">
-          <div class="email-input-group">
-            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
-            <input
-              v-model="globalEmail"
-              placeholder="通知邮箱"
-              @blur="saveEmail"
-              @keyup.enter="saveEmail"
-            />
+          <div class="interval-group">
+            <span class="interval-label">轮询间隔</span>
+            <input v-model.number="pollInterval" type="number" min="5" max="3600" class="interval-input" />
+            <span class="interval-unit">秒</span>
           </div>
 
           <div class="monitor-group">
@@ -92,6 +96,9 @@ onMounted(load)
             </button>
           </div>
 
+          <button class="btn-settings" @click="showSettings = true" title="SMTP 设置">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
           <button class="btn-add" @click="showAdd = true">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             添加学生
@@ -119,12 +126,14 @@ onMounted(load)
           :key="s.student_id"
           :student="s"
           @toggleMonitor="handleToggleStudent(s.student_id)"
+          @testEmail="handleTestEmail(s.student_id)"
           @delete="removeStudent(s.student_id)"
         />
       </div>
     </main>
 
     <AddStudentDialog v-if="showAdd" @close="showAdd = false" @added="onAdded" />
+    <SmtpSettings v-if="showSettings" @close="showSettings = false" />
   </div>
 </template>
 
@@ -177,34 +186,28 @@ onMounted(load)
   justify-content: flex-end;
 }
 
-/* Email input */
-.email-input-group {
+/* Interval input */
+.interval-group {
   display: flex;
   align-items: center;
-  background: rgba(255,255,255,0.08);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  height: 34px;
   gap: 6px;
-  border: 1px solid rgba(255,255,255,0.1);
-  transition: all var(--transition);
 }
-.email-input-group:focus-within {
-  background: rgba(255,255,255,0.14);
-  border-color: rgba(255,255,255,0.25);
-}
-.input-icon {
+.interval-label {
+  font-size: 12px;
   color: var(--ink-300);
-  flex-shrink: 0;
 }
-.email-input-group input {
-  background: none;
-  border: none;
+.interval-input {
+  width: 50px;
+  height: 28px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
   color: #fff;
+  text-align: center;
   font-size: 13px;
-  width: 150px;
 }
-.email-input-group input::placeholder {
+.interval-unit {
+  font-size: 12px;
   color: var(--ink-300);
 }
 

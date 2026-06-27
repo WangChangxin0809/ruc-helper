@@ -29,6 +29,15 @@ export const reloginStudent = (id: string) =>
 export const toggleMonitorStudent = (id: string) =>
   api.post<Student>(`/students/${id}/monitor`).then(r => r.data)
 
+export const testEmailStudent = (id: string) =>
+  api.post(`/students/${id}/test-email`).then(r => r.data)
+
+export const updateStudentEmail = (id: string, email: string) =>
+  api.put<Student>(`/students/${id}/email?email=${encodeURIComponent(email)}`).then(r => r.data)
+
+export const setMonitorConfig = (email: string, pollInterval: number) =>
+  api.post(`/monitor/config?email=${encodeURIComponent(email)}&poll_interval=${pollInterval}`).then(r => r.data)
+
 // Grades
 export const getGrades = (studentId: string) =>
   api.get<GradeItem[]>(`/grades/${studentId}`).then(r => r.data)

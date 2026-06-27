@@ -18,7 +18,7 @@ API_CODE = "jw.xsd.xsdInfo.controller.CjglKccjckController.findKccjList"
 
 TZ = timezone(timedelta(hours=8))
 
-# 全局邮件配置（从环境变量读取）
+# 全局邮件配置（环境变量优先，可通过 API 动态覆盖）
 import os
 EMAIL_CONFIG = {
     "smtpHost": os.getenv("SMTP_HOST", "smtp.qq.com"),
@@ -27,6 +27,21 @@ EMAIL_CONFIG = {
     "smtpPassword": os.getenv("SMTP_PASSWORD", ""),
     "fromAddress": os.getenv("SMTP_FROM", ""),
 }
+
+
+def reload_email_config():
+    """从数据库加载 SMTP 配置，覆盖环境变量中的空值"""
+    try:
+        from ..database import SessionLocal
+        from ..models import Setting
+        db = SessionLocal()
+        for k in ["smtpHost", "smtpPort", "smtpUsername", "smtpPassword", "fromAddress"]:
+            s = db.query(Setting).filter(Setting.key == k).first()
+            if s and s.value:
+                EMAIL_CONFIG[k] = int(s.value) if k == "smtpPort" else s.value
+        db.close()
+    except Exception:
+        pass
 
 
 def update_email_config(config: dict):

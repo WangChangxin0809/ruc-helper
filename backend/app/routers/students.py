@@ -115,3 +115,30 @@ def toggle_monitor(student_id: str, db: Session = Depends(get_db)):
     s.is_monitored = not s.is_monitored
     db.commit()
     return _to_response(s, db)
+
+
+@router.post("/{student_id}/test-email", response_model=MessageResponse)
+def test_email(student_id: str, db: Session = Depends(get_db)):
+    s = db.query(Student).filter(Student.student_id == student_id).first()
+    if not s:
+        raise HTTPException(404, "学生不存在")
+    if not s.email:
+        raise HTTPException(400, "该学生未设置通知邮箱")
+
+    from ..services.grade import send_grade_email
+    from ..models import Grade
+    grades = db.query(Grade).filter(Grade.student_id == student_id).all()
+    ok = send_grade_email(s.email, s.name or student_id, grades[:1], [])
+    if ok:
+        return MessageResponse(message=f"测试邮件已发送至 {s.email}")
+    raise HTTPException(500, "邮件发送失败，请检查 SMTP 配置")
+
+
+@router.put("/{student_id}/email", response_model=StudentResponse)
+def update_email(student_id: str, email: str = "", db: Session = Depends(get_db)):
+    s = db.query(Student).filter(Student.student_id == student_id).first()
+    if not s:
+        raise HTTPException(404, "学生不存在")
+    s.email = email
+    db.commit()
+    return _to_response(s, db)

@@ -3,7 +3,7 @@ import { useRouter } from 'vue-router'
 import type { Student } from '../types'
 
 const props = defineProps<{ student: Student }>()
-const emit = defineEmits<{ toggleMonitor: []; delete: [] }>()
+const emit = defineEmits<{ toggleMonitor: []; delete: []; testEmail: [] }>()
 const router = useRouter()
 
 function formatTime(t: string | null) {
@@ -33,6 +33,9 @@ function formatTime(t: string | null) {
       </div>
 
       <div class="card-actions">
+        <button v-if="student.email" class="btn-test-email" @click.stop="emit('testEmail')" title="发送测试邮件">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+        </button>
         <label class="toggle-switch" :title="student.is_monitored ? '取消监控' : '加入监控'">
           <input
             type="checkbox"
@@ -56,6 +59,10 @@ function formatTime(t: string | null) {
         <div class="meta-row">
           <span class="meta-label">最近变动</span>
           <span class="meta-value">{{ formatTime(student.last_change_at) }}</span>
+        </div>
+        <div class="meta-row" v-if="student.email">
+          <span class="meta-label">通知邮箱</span>
+          <span class="meta-value" style="font-size:11px">{{ student.email }}</span>
         </div>
         <div class="meta-row" v-if="student.is_monitored">
           <span class="meta-label">监控状态</span>
@@ -180,6 +187,16 @@ function formatTime(t: string | null) {
 .btn-delete:hover {
   color: var(--cinnabar);
   background: var(--cinnabar-light);
+}
+.btn-test-email {
+  background: none;
+  color: var(--ink-300);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.btn-test-email:hover {
+  color: var(--jade);
+  background: var(--jade-light);
 }
 
 .card-body {

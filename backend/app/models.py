@@ -73,3 +73,10 @@ class NotificationLog(Base):
 
     def get_grade_ids(self):
         return json.loads(self.grade_ids) if self.grade_ids else []
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(Text, default="")

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import init_db
-from .routers import students, grades, monitor
+from .routers import students, grades, monitor, settings
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(students.router)
 app.include_router(grades.router)
 app.include_router(monitor.router)
+app.include_router(settings.router)
 
 
 @app.get("/api/health")

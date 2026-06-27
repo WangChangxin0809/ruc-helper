@@ -83,13 +83,12 @@ async def _poll_student(db: Session, student: Student):
         db.add(log)
     db.commit()
 
-    # 发送邮件（使用全局邮箱或学生个人邮箱）
-    email_to = _global_email or student.email
+    # 发送邮件到学生个人邮箱
+    if not student.email:
+        print(f"[monitor] {student_id} 未设置通知邮箱，跳过")
+        return
     student_name = student.name or student_id
-    if email_to:
-        send_grade_email(email_to, student_name, result["new_grades"], result["updated_grades"])
-    else:
-        print(f"[monitor] 未配置通知邮箱，跳过邮件发送")
+    send_grade_email(student.email, student_name, result["new_grades"], result["updated_grades"])
 
 
 async def _poll_loop():
